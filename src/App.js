@@ -3,18 +3,17 @@ import * as THREE from "three";
 import { ARButton } from "three/examples/jsm/webxr/ARButton";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { XREstimatedLight } from "three/examples/jsm/webxr/XREstimatedLight";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 
 function App() {
-  let reticle;
+  let scene, camera, renderer, reticle, controller, transformControl;
   let hitTestSource = null;
   let hitTestSourceRequested = false;
-
-  let scene, camera, renderer;
+  let items = [];
+  let itemSelectedIndex = 0;
   let selectedModel = null;
-  let isDragging = false;
-  let lastTouchDistance = 0;
 
-  let models = [
+  const models = [
     "./dylan_armchair_yolk_yellow.glb",
     "./ivan_armchair_mineral_blue.glb",
     "./marble_coffee_table.glb",
@@ -26,11 +25,8 @@ function App() {
     "Little_Bookcase.glb",
     "Plant_Decor.glb"
   ];
-  let modelScaleFactor = [0.01, 0.01, 0.005, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.1];
-  let items = [];
-  let itemSelectedIndex = 0;
 
-  let controller;
+  const modelScaleFactor = [0.01, 0.01, 0.005, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.1];
 
   init();
   setupFurnitureSelection();
@@ -39,6 +35,7 @@ function App() {
   function init() {
     let myCanvas = document.getElementById("canvas");
     scene = new THREE.Scene();
+
     camera = new THREE.PerspectiveCamera(
       70,
       myCanvas.innerWidth / myCanvas.innerHeight,
@@ -55,6 +52,7 @@ function App() {
       antialias: true,
       alpha: true,
     });
+
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(myCanvas.innerWidth, myCanvas.innerHeight);
     renderer.xr.enabled = true;
@@ -73,17 +71,17 @@ function App() {
       scene.remove(xrLight);
     });
 
-    let arButton = ARButton.createButton(renderer, {
-      requiredFeatures: ["hit-test"],
-      optionalFeatures: ["dom-overlay", "light-estimation"],
-      domOverlay: { root: document.body },
-    });
-    arButton.style.bottom = "20%";
-    document.body.appendChild(arButton);
+    document.body.appendChild(
+      ARButton.createButton(renderer, {
+        requiredFeatures: ["hit-test"],
+        optionalFeatures: ["dom-overlay", "light-estimation"],
+        domOverlay: { root: document.body },
+      })
+    );
 
     for (let i = 0; i < models.length; i++) {
       const loader = new GLTFLoader();
-      loader.load(models[i], function (glb) {
+      loader.load(models[i], (glb) => {
         let model = glb.scene;
         items[i] = model;
       });
@@ -100,15 +98,30 @@ function App() {
     reticle.matrixAutoUpdate = false;
     reticle.visible = false;
     scene.add(reticle);
-  }
 
-  function onClicked(e, selectItem, index) {
-    itemSelectedIndex = index;
-    for (let i = 0; i < models.length; i++) {
-      const el = document.querySelector(`#item` + i);
-      el?.classList.remove("clicked");
-    }
-    e.target.classList.add("clicked");
+    // Gizmo: TransformControls
+    transformControl = new TransformControls(camera, renderer.domElement);
+    transformControl.addEventListener("dragging-changed", (event) => {
+      renderer.xr.enabled = !event.value; // disable XR when dragging
+    });
+    scene.add(transformControl);
+
+    // Add mode dropdown
+    const modeSelect = document.createElement("select");
+    modeSelect.style.position = "absolute";
+    modeSelect.style.bottom = "10px";
+    modeSelect.style.left = "10px";
+    modeSelect.style.zIndex = 100;
+    ["translate", "rotate", "scale"].forEach((mode) => {
+      const option = document.createElement("option");
+      option.value = mode;
+      option.innerText = mode;
+      modeSelect.appendChild(option);
+    });
+    modeSelect.addEventListener("change", () => {
+      transformControl.setMode(modeSelect.value);
+    });
+    document.body.appendChild(modeSelect);
   }
 
   function onSelect() {
@@ -121,62 +134,25 @@ function App() {
         newModel.quaternion,
         newModel.scale
       );
+
       let scaleFactor = modelScaleFactor[itemSelectedIndex];
       newModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       scene.add(newModel);
-      addGestureListeners(newModel);
+
+      // Set model to TransformControls
+      selectedModel = newModel;
+      transformControl.attach(selectedModel);
     }
   }
 
-  function addGestureListeners(model) {
-    selectedModel = model;
-    const domElement = renderer.domElement;
-
-    domElement.addEventListener("touchstart", (event) => {
-      if (event.touches.length === 1) {
-        isDragging = true;
-      }
-
-      if (event.touches.length === 2) {
-        const dx = event.touches[0].clientX - event.touches[1].clientX;
-        const dy = event.touches[0].clientY - event.touches[1].clientY;
-        lastTouchDistance = Math.hypot(dx, dy);
-      }
-    });
-
-    domElement.addEventListener("touchmove", (event) => {
-      if (!selectedModel) return;
-
-      if (event.touches.length === 1 && isDragging) {
-        const touch = event.touches[0];
-        let deltaX = touch.movementX || 0.01;
-        let deltaZ = touch.movementY || 0.01;
-
-        selectedModel.position.x += deltaX * 0.001;
-        selectedModel.position.z += deltaZ * 0.001;
-      }
-
-      if (event.touches.length === 2) {
-        const dx = event.touches[0].clientX - event.touches[1].clientX;
-        const dy = event.touches[0].clientY - event.touches[1].clientY;
-        const currentDistance = Math.hypot(dx, dy);
-
-        const scaleFactor = currentDistance / lastTouchDistance;
-        selectedModel.scale.multiplyScalar(scaleFactor);
-        lastTouchDistance = currentDistance;
-      }
-    });
-
-    domElement.addEventListener("touchend", () => {
-      isDragging = false;
-    });
-
-    domElement.addEventListener("dblclick", () => {
-      if (selectedModel) {
-        selectedModel.rotation.y += Math.PI / 2;
-      }
-    });
+  function onClicked(e, model, index) {
+    itemSelectedIndex = index;
+    for (let i = 0; i < models.length; i++) {
+      const el = document.querySelector(`#item` + i);
+      el?.classList.remove("clicked");
+    }
+    e.target.classList.add("clicked");
   }
 
   function setupFurnitureSelection() {
@@ -203,16 +179,14 @@ function App() {
       const referenceSpace = renderer.xr.getReferenceSpace();
       const session = renderer.xr.getSession();
 
-      if (hitTestSourceRequested === false) {
-        session.requestReferenceSpace("viewer").then(function (referenceSpace) {
-          session
-            .requestHitTestSource({ space: referenceSpace })
-            .then(function (source) {
-              hitTestSource = source;
-            });
+      if (!hitTestSourceRequested) {
+        session.requestReferenceSpace("viewer").then((refSpace) => {
+          session.requestHitTestSource({ space: refSpace }).then((source) => {
+            hitTestSource = source;
+          });
         });
 
-        session.addEventListener("end", function () {
+        session.addEventListener("end", () => {
           hitTestSourceRequested = false;
           hitTestSource = null;
         });
