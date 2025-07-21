@@ -12,6 +12,8 @@ function App() {
   let items = [];
   let itemSelectedIndex = 0;
   let selectedModel = null;
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
 
   const models = [
     "./dylan_armchair_yolk_yellow.glb",
@@ -34,11 +36,12 @@ function App() {
 
   function init() {
     let myCanvas = document.getElementById("canvas");
+
     scene = new THREE.Scene();
 
     camera = new THREE.PerspectiveCamera(
       70,
-      myCanvas.innerWidth / myCanvas.innerHeight,
+      window.innerWidth / window.innerHeight,
       0.01,
       20
     );
@@ -54,7 +57,7 @@ function App() {
     });
 
     renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(myCanvas.innerWidth, myCanvas.innerHeight);
+    renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
 
     const xrLight = new XREstimatedLight(renderer);
@@ -79,8 +82,8 @@ function App() {
       })
     );
 
+    const loader = new GLTFLoader();
     for (let i = 0; i < models.length; i++) {
-      const loader = new GLTFLoader();
       loader.load(models[i], (glb) => {
         let model = glb.scene;
         items[i] = model;
@@ -99,14 +102,14 @@ function App() {
     reticle.visible = false;
     scene.add(reticle);
 
-    // Gizmo: TransformControls
+    // === TransformControls ===
     transformControl = new TransformControls(camera, renderer.domElement);
     transformControl.addEventListener("dragging-changed", (event) => {
-      renderer.xr.enabled = !event.value; // disable XR when dragging
+      renderer.xr.enabled = !event.value;
     });
     scene.add(transformControl);
 
-    // Add mode dropdown
+    // === Mode Dropdown ===
     const modeSelect = document.createElement("select");
     modeSelect.style.position = "absolute";
     modeSelect.style.bottom = "10px";
@@ -122,6 +125,25 @@ function App() {
       transformControl.setMode(modeSelect.value);
     });
     document.body.appendChild(modeSelect);
+
+    // === Pointer Tap Raycast to Re-Attach Gizmo ===
+    window.addEventListener("pointerdown", (event) => {
+      pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+
+      const intersects = raycaster.intersectObjects(scene.children, true);
+      if (intersects.length > 0) {
+        let object = intersects[0].object;
+        while (object.parent && !items.includes(object)) {
+          object = object.parent;
+        }
+        if (items.includes(object)) {
+          selectedModel = object;
+          transformControl.attach(selectedModel);
+        }
+      }
+    });
   }
 
   function onSelect() {
