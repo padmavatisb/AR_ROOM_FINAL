@@ -1,4 +1,4 @@
-import "./App.css";
+import "./App.css"; 
 import * as THREE from "three";
 import { ARButton } from "three/examples/jsm/webxr/ARButton";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
@@ -14,6 +14,10 @@ function App() {
   let selectedModel = null;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+
+  let lastTouch = 0;
+  let lastTouchPositions = [];
+  let initialPinchDistance = null;
 
   const models = [
     "./dylan_armchair_yolk_yellow.glb",
@@ -102,14 +106,12 @@ function App() {
     reticle.visible = false;
     scene.add(reticle);
 
-    // === TransformControls ===
     transformControl = new TransformControls(camera, renderer.domElement);
     transformControl.addEventListener("dragging-changed", (event) => {
       renderer.xr.enabled = !event.value;
     });
     scene.add(transformControl);
 
-    // === Mode Dropdown ===
     const modeSelect = document.createElement("select");
     modeSelect.style.position = "absolute";
     modeSelect.style.bottom = "10px";
@@ -126,24 +128,72 @@ function App() {
     });
     document.body.appendChild(modeSelect);
 
-    // === Pointer Tap Raycast to Re-Attach Gizmo ===
     window.addEventListener("pointerdown", (event) => {
-      pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-      pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-      raycaster.setFromCamera(pointer, camera);
-
-      const intersects = raycaster.intersectObjects(scene.children, true);
-      if (intersects.length > 0) {
-        let object = intersects[0].object;
-        while (object.parent && !items.includes(object)) {
-          object = object.parent;
-        }
-        if (items.includes(object)) {
-          selectedModel = object;
-          transformControl.attach(selectedModel);
+      const now = new Date().getTime();
+      if (now - lastTouch < 300) {
+        pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const intersects = raycaster.intersectObjects(scene.children, true);
+        if (intersects.length > 0) {
+          let object = intersects[0].object;
+          while (object.parent && !items.includes(object)) {
+            object = object.parent;
+          }
+          if (items.includes(object)) {
+            selectedModel = object;
+            transformControl.attach(selectedModel);
+          }
         }
       }
+      lastTouch = now;
     });
+
+    myCanvas.addEventListener("touchstart", onTouchStart, false);
+    myCanvas.addEventListener("touchmove", onTouchMove, false);
+    myCanvas.addEventListener("touchend", onTouchEnd, false);
+  }
+
+  function onTouchStart(event) {
+    if (!selectedModel) return;
+    if (event.touches.length === 2) {
+      initialPinchDistance = getTouchDistance(event.touches);
+    } else if (event.touches.length === 1) {
+      lastTouchPositions[0] = {
+        x: event.touches[0].pageX,
+        y: event.touches[0].pageY,
+      };
+    }
+  }
+
+  function onTouchMove(event) {
+    if (!selectedModel) return;
+    if (event.touches.length === 1 && lastTouchPositions[0]) {
+      const dx = event.touches[0].pageX - lastTouchPositions[0].x;
+      const dy = event.touches[0].pageY - lastTouchPositions[0].y;
+      selectedModel.position.x += dx * 0.0005;
+      selectedModel.position.z += dy * 0.0005;
+      lastTouchPositions[0] = {
+        x: event.touches[0].pageX,
+        y: event.touches[0].pageY,
+      };
+    } else if (event.touches.length === 2) {
+      const newDistance = getTouchDistance(event.touches);
+      const scaleChange = newDistance / initialPinchDistance;
+      selectedModel.scale.multiplyScalar(scaleChange);
+      initialPinchDistance = newDistance;
+    }
+  }
+
+  function onTouchEnd() {
+    lastTouchPositions = [];
+    initialPinchDistance = null;
+  }
+
+  function getTouchDistance(touches) {
+    const dx = touches[0].pageX - touches[1].pageX;
+    const dy = touches[0].pageY - touches[1].pageY;
+    return Math.sqrt(dx * dx + dy * dy);
   }
 
   function onSelect() {
@@ -161,8 +211,6 @@ function App() {
       newModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       scene.add(newModel);
-
-      // Set model to TransformControls
       selectedModel = newModel;
       transformControl.attach(selectedModel);
     }
