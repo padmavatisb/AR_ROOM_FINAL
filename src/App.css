@@ -1,0 +1,101 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Just Updated ARButton style */
+#ARButton {
+  position: absolute;
+  bottom: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+#ARButton:hover {
+  background-color: #0056b3;
+}
+
+/* Selected model indicator */
+.clicked {
+  border: 2px solid #00ffff;
+  background-color: #333;
+}
+
+.button-container {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+
+.button-container button {
+  margin-right: 10px;
+  padding: 10px 20px;
+  font-size: 16px;
+}
+
+.gesture-hints {
+  position: absolute;
+  bottom: 20px;
+  left: 10px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  touch-action: none; /* disables default pinch zoom */
+}
+canvas {
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
