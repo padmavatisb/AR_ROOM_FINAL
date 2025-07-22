@@ -62,3 +62,22 @@
   border: 2px solid #00ffff;
   background-color: #333;
 }
+/* Apply to the outer container that holds all model thumbnails */
+.your-existing-scroll-container {
+  display: flex;
+  overflow-x: auto;
+  gap: 10px; /* ensures even spacing between items */
+}
+
+/* Apply to each thumbnail or card wrapper */
+.model-item {
+  width: 120px;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 8px;
+  flex-shrink: 0;
+  position: relative;
+}
