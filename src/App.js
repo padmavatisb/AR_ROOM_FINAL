@@ -3,7 +3,6 @@ import * as THREE from "three";
 import { ARButton } from "three/examples/jsm/webxr/ARButton";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { XREstimatedLight } from "three/examples/jsm/webxr/XREstimatedLight";
-import { TransformControls } from "three/examples/jsm/controls/TransformControls";
 
 function App() {
   let reticle;
@@ -11,7 +10,6 @@ function App() {
   let hitTestSourceRequested = false;
 
   let scene, camera, renderer;
-  let transformControl;
   let xrLight;
   let fallbackLight, directionalLight;
 
@@ -33,7 +31,9 @@ function App() {
   let itemSelectedIndex = 0;
   let selectedModel = null;
 
-  let controller;
+  let lastTouchDistance = 0;
+  let isDoubleTap = false;
+  let lastTap = 0;
 
   init();
   setupFurnitureSelection();
@@ -55,7 +55,6 @@ function App() {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.xr.enabled = true;
 
-    // Fallback Lights (when AR light estimation is not available)
     fallbackLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
     fallbackLight.position.set(0, 1, 0);
     scene.add(fallbackLight);
@@ -65,7 +64,6 @@ function App() {
     directionalLight.castShadow = true;
     scene.add(directionalLight);
 
-    // Light Estimation Setup
     xrLight = new XREstimatedLight(renderer);
     xrLight.addEventListener("estimationstart", () => {
       scene.add(xrLight);
@@ -87,7 +85,6 @@ function App() {
       scene.environment = null;
     });
 
-    // AR Button
     const arButton = ARButton.createButton(renderer, {
       requiredFeatures: ["hit-test"],
       optionalFeatures: ["light-estimation", "dom-overlay"],
@@ -96,14 +93,6 @@ function App() {
     arButton.style.bottom = "20%";
     document.body.appendChild(arButton);
 
-    // Transform Controls
-    transformControl = new TransformControls(camera, renderer.domElement);
-    transformControl.addEventListener("dragging-changed", (event) => {
-      renderer.xr.enabled = !event.value;
-    });
-    scene.add(transformControl);
-
-    // Load Models
     for (let i = 0; i < models.length; i++) {
       const loader = new GLTFLoader();
       loader.load(models[i], function (glb) {
@@ -118,53 +107,63 @@ function App() {
       });
     }
 
-    controller = renderer.xr.getController(0);
-    controller.addEventListener("select", onSelect);
-    scene.add(controller);
-
-    // Reticle
-    reticle = new THREE.Mesh(
-      new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-    );
-    reticle.matrixAutoUpdate = false;
-    reticle.visible = false;
-    scene.add(reticle);
-
-    // Transform Gizmo Keyboard Shortcuts
-    window.addEventListener("keydown", (e) => {
-      switch (e.key.toLowerCase()) {
-        case "t":
-          transformControl.setMode("translate");
-          break;
-        case "r":
-          transformControl.setMode("rotate");
-          break;
-        case "s":
-          transformControl.setMode("scale");
-          break;
-      }
-    });
+    renderer.domElement.addEventListener("touchstart", handleTouchStart, false);
+    renderer.domElement.addEventListener("touchmove", handleTouchMove, false);
   }
 
-  function onSelect() {
-    if (reticle.visible) {
-      let newModel = items[itemSelectedIndex].clone();
-      newModel.visible = true;
-
-      reticle.matrix.decompose(
-        newModel.position,
-        newModel.quaternion,
-        newModel.scale
-      );
-
-      let scaleFactor = modelScaleFactor[itemSelectedIndex];
-      newModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
-
-      scene.add(newModel);
-      selectedModel = newModel;
-      transformControl.attach(selectedModel);
+  function handleTouchStart(event) {
+    const now = new Date().getTime();
+    if (event.touches.length === 1) {
+      if (now - lastTap < 300) {
+        isDoubleTap = true;
+        insertModel();
+      }
+      lastTap = now;
     }
+
+    if (event.touches.length === 2) {
+      const dx = event.touches[0].clientX - event.touches[1].clientX;
+      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      lastTouchDistance = Math.sqrt(dx * dx + dy * dy);
+    }
+  }
+
+  function handleTouchMove(event) {
+    if (!selectedModel) return;
+
+    if (event.touches.length === 1) {
+      const deltaX = event.touches[0].movementX || 0;
+      const deltaY = event.touches[0].movementY || 0;
+      selectedModel.rotation.y += deltaX * 0.01;
+      selectedModel.rotation.x += deltaY * 0.01;
+    }
+
+    if (event.touches.length === 2) {
+      const dx = event.touches[0].clientX - event.touches[1].clientX;
+      const dy = event.touches[0].clientY - event.touches[1].clientY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const scaleFactor = distance / lastTouchDistance;
+      selectedModel.scale.multiplyScalar(scaleFactor);
+      lastTouchDistance = distance;
+    }
+  }
+
+  function insertModel() {
+    if (!reticle || !reticle.visible) return;
+    let newModel = items[itemSelectedIndex].clone();
+    newModel.visible = true;
+
+    reticle.matrix.decompose(
+      newModel.position,
+      newModel.quaternion,
+      newModel.scale
+    );
+
+    let scaleFactor = modelScaleFactor[itemSelectedIndex];
+    newModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+    scene.add(newModel);
+    selectedModel = newModel;
   }
 
   const onClicked = (e, selectItem, index) => {
@@ -234,4 +233,3 @@ function App() {
 }
 
 export default App;
-
